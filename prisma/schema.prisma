@@ -1,0 +1,129 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Provider {
+  id            String            @id @default(uuid())
+  discordId     String            @unique @map("discord_id")
+  username      String
+  forumThreadId String?           @map("forum_thread_id")
+  totalDeals    Int               @default(0) @map("total_deals")
+  averageRating Float             @default(0) @map("average_rating")
+  ratingCount   Int               @default(0) @map("rating_count")
+  isBlacklisted Boolean           @default(false) @map("is_blacklisted")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+  services      ProviderService[]
+  deals         Deal[]
+  ratings       Rating[]
+
+  @@map("providers")
+}
+
+model ProviderService {
+  id             String   @id @default(uuid())
+  providerId     String   @map("provider_id")
+  provider       Provider @relation(fields: [providerId], references: [id])
+  serviceType    String   @map("service_type")
+  portfolioLink  String   @map("portfolio_link")
+  startingPrice  Float    @map("starting_price")
+  deliveryTimeDays Int    @map("delivery_time_days")
+  adEmbedMessageId String? @map("ad_embed_message_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("provider_services")
+}
+
+model Ticket {
+  id               String         @id @default(uuid())
+  discordChannelId String         @map("discord_channel_id")
+  ticketType       String         @map("ticket_type")
+  creatorId        String         @map("creator_id")
+  assignedStaffId  String?        @map("assigned_staff_id")
+  status           String
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  deals            Deal[]
+  partnership      SmpPartnership?
+
+  @@map("tickets")
+}
+
+model Deal {
+  id         String           @id @default(uuid())
+  ticketId   String           @map("ticket_id")
+  providerId String           @map("provider_id")
+  customerId String           @map("customer_id")
+  price      Float
+  commission Float
+  netAmount  Float            @map("net_amount")
+  status     String
+  deadline   DateTime
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+  ticket     Ticket           @relation(fields: [ticketId], references: [id])
+  provider   Provider         @relation(fields: [providerId], references: [id])
+  ratings    Rating[]
+  history    DealHistoryLog[]
+
+  @@map("deals")
+}
+
+model Rating {
+  id         String   @id @default(uuid())
+  dealId     String   @map("deal_id")
+  providerId String   @map("provider_id")
+  customerId String   @map("customer_id")
+  stars      Int
+  reviewText String?  @map("review_text")
+  createdAt  DateTime @default(now()) @map("created_at")
+  deal       Deal     @relation(fields: [dealId], references: [id])
+  provider   Provider @relation(fields: [providerId], references: [id])
+
+  @@map("ratings")
+}
+
+model CommissionTier {
+  id                String   @id @default(uuid())
+  minEarnings       Float    @map("min_earnings")
+  maxEarnings       Float?   @map("max_earnings")
+  commissionPercent Float    @map("commission_percent")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("commission_tiers")
+}
+
+model DealHistoryLog {
+  id        String   @id @default(uuid())
+  dealId    String   @map("deal_id")
+  action    String
+  actorId   String   @map("actor_id")
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  deal      Deal     @relation(fields: [dealId], references: [id])
+
+  @@map("deal_history_logs")
+}
+
+model SmpPartnership {
+  id          String   @id @default(uuid())
+  ticketId    String   @unique @map("ticket_id")
+  serverName  String   @map("server_name")
+  description String
+  memberCount Int      @map("member_count")
+  inviteLink  String   @map("invite_link")
+  proposal    String
+  status      String
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  ticket      Ticket   @relation(fields: [ticketId], references: [id])
+
+  @@map("smp_partnerships")
+}
