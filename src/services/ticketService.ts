@@ -23,7 +23,7 @@ import { prisma } from './prisma.js';
 
 const safeNumber = (value: string) => Number.parseFloat(value.replace(/[^0-9.]/g, ''));
 
-type TicketPromptInteraction = StringSelectMenuInteraction | ButtonInteraction;
+type TicketPromptInteraction = Pick<StringSelectMenuInteraction, 'showModal'>;
 
 const fetchTranscriptChannel = async (interaction: Interaction, type: 'support' | 'service' | 'partnership'): Promise<GuildTextBasedChannel | null> => {
   const transcriptId = transcriptConfig[type];
