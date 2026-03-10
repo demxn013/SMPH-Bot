@@ -31,6 +31,18 @@ export const commandDefinitions = [
               { name: 'Support', value: 'support' },
               { name: 'Partner', value: 'partner' }
             )
+    .setName('ticket-panel')
+    .setDescription('Post a ticket panel embed in this channel')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addStringOption((o) =>
+      o
+        .setName('type')
+        .setDescription('Which ticket panel to post')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Service', value: 'service' },
+          { name: 'Support', value: 'support' },
+          { name: 'Partner', value: 'partner' }
         )
     ),
   new SlashCommandBuilder()

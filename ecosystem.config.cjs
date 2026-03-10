@@ -8,6 +8,7 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: '500M',
+      exec_mode: "fork",
       env: {
         NODE_ENV: 'production'
       }
