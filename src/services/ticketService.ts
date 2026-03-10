@@ -10,7 +10,6 @@ import {
   StringSelectMenuBuilder,
   TextInputBuilder,
   TextInputStyle,
-  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type GuildTextBasedChannel,
   type Interaction,
@@ -209,6 +208,8 @@ export const showSupportModal = async (interaction: TicketPromptInteraction) => 
 
 export const handleTicketModalSubmission = async (interaction: ModalSubmitInteraction) => {
   if (!interaction.guild) return;
+
+  console.log(`[ticket] Modal submitted: ${interaction.customId} by ${interaction.user.tag} (${interaction.user.id})`);
 
   console.log(`[ticket] Modal submitted: ${interaction.customId} by ${interaction.user.tag} (${interaction.user.id})`);
 
