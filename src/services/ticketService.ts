@@ -1,9 +1,12 @@
 import {
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ChannelType,
+  EmbedBuilder,
+  MessageFlags,
   ModalBuilder,
   PermissionFlagsBits,
-  RoleSelectMenuBuilder,
   StringSelectMenuBuilder,
   TextInputBuilder,
   TextInputStyle,
@@ -14,39 +17,138 @@ import {
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction
 } from 'discord.js';
-import { env, transcriptConfig } from '../config/env.js';
+import { ticketChannelConfig, transcriptConfig, env } from '../config/env.js';
 import { SERVICE_TYPES, type ServiceType } from '../constants/serviceTypes.js';
 import { createTicketLogEmbed } from './embedFactory.js';
 import { prisma } from './prisma.js';
 
 const safeNumber = (value: string) => Number.parseFloat(value.replace(/[^0-9.]/g, ''));
 
+type TicketPromptInteraction = StringSelectMenuInteraction | ButtonInteraction;
+
 const fetchTranscriptChannel = async (interaction: Interaction, type: 'support' | 'service' | 'partnership'): Promise<GuildTextBasedChannel | null> => {
   const transcriptId = transcriptConfig[type];
-  if (!transcriptId) {
-    return null;
-  }
+  if (!transcriptId) return null;
+
   const channel = await interaction.guild?.channels.fetch(transcriptId);
-  if (!channel?.isTextBased()) {
-    return null;
-  }
+  if (!channel?.isTextBased()) return null;
+
   return channel;
 };
 
 export const createTicketEntryMenu = () => {
   const menu = new StringSelectMenuBuilder()
     .setCustomId('ticket-entry-select')
-    .setPlaceholder('Choose a ticket type')
+    .setPlaceholder('Choose a ticket category')
     .addOptions(
-      { label: 'Request a Service', value: 'service_request' },
-      { label: 'Register as a Service Provider', value: 'provider_registration' },
-      { label: 'SMP Partnership', value: 'smp_partnership' }
+      { label: 'Service Tickets', value: 'service_tickets', description: 'Request a service or apply to provide one' },
+      { label: 'Partner Tickets', value: 'partner_tickets', description: 'Basic or paid partnership requests' },
+      { label: 'Support Ticket', value: 'support_ticket', description: 'Open a regular support ticket' }
     );
 
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 };
 
-export const showProviderRegistrationModal = async (interaction: StringSelectMenuInteraction) => {
+export const createServiceTicketTypeMenu = () => {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId('service-ticket-type-select')
+    .setPlaceholder('Choose a service ticket type')
+    .addOptions(
+      { label: 'Request a Service', value: 'service_request' },
+      { label: 'Apply as Service Provider', value: 'provider_registration' }
+    );
+
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
+};
+
+export const createPartnershipTypeMenu = () => {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId('partnership-ticket-type-select')
+    .setPlaceholder('Choose a partnership type')
+    .addOptions(
+      { label: 'Basic Partnership', value: 'basic' },
+      { label: 'Paid Partnership', value: 'paid' }
+    );
+
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
+};
+
+const createOpenTicketButton = (customId: string, label: string) =>
+  new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(ButtonStyle.Primary));
+
+const createServiceTicketPanelEmbed = () =>
+  new EmbedBuilder()
+    .setTitle('🛠️ Service Tickets')
+    .setDescription('Need to request a service or apply as a provider? Click the button below to start.')
+    .setColor(0x5865f2);
+
+const createPartnerTicketPanelEmbed = () =>
+  new EmbedBuilder()
+    .setTitle('🤝 Partner Tickets')
+    .setDescription('Open a partnership ticket (basic or paid) using the button below.')
+    .setColor(0x57f287);
+
+const createSupportTicketPanelEmbed = () =>
+  new EmbedBuilder()
+    .setTitle('🆘 Support Tickets')
+    .setDescription('Need help? Click below to open a regular support ticket.')
+    .setColor(0xfee75c);
+
+export const postTicketPanels = async (interaction: ChatInputCommandInteraction) => {
+  if (!interaction.guild) {
+    await interaction.reply({ content: 'This command can only be used in a server.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const panels = [
+    {
+      key: 'service',
+      channelId: ticketChannelConfig.service,
+      embed: createServiceTicketPanelEmbed(),
+      button: createOpenTicketButton('open-service-ticket', 'Open Service Ticket')
+    },
+    {
+      key: 'partnership',
+      channelId: ticketChannelConfig.partnership,
+      embed: createPartnerTicketPanelEmbed(),
+      button: createOpenTicketButton('open-partner-ticket', 'Open Partner Ticket')
+    },
+    {
+      key: 'support',
+      channelId: ticketChannelConfig.support,
+      embed: createSupportTicketPanelEmbed(),
+      button: createOpenTicketButton('open-support-ticket', 'Open Support Ticket')
+    }
+  ] as const;
+
+  const results: string[] = [];
+
+  for (const panel of panels) {
+    const channel = await interaction.guild.channels.fetch(panel.channelId).catch(() => null);
+    if (!channel?.isTextBased()) {
+      results.push(`❌ ${panel.key}: channel not found or not text-based (${panel.channelId})`);
+      continue;
+    }
+
+    const canCheck = 'permissionsFor' in channel;
+    const botMember = interaction.guild.members.me;
+    const canSend = canCheck && botMember ? channel.permissionsFor(botMember).has(PermissionFlagsBits.SendMessages) : false;
+    if (!canSend) {
+      results.push(`❌ ${panel.key}: missing Send Messages in <#${panel.channelId}>`);
+      continue;
+    }
+
+    await channel.send({ embeds: [panel.embed], components: [panel.button] });
+    results.push(`✅ ${panel.key}: posted in <#${panel.channelId}>`);
+  }
+
+  await interaction.reply({
+    content: `Ticket panels finished:\n${results.join('\n')}\n\nFix any ❌ issues (channel ID or permissions) and run /ticket-panel again.`,
+    flags: MessageFlags.Ephemeral
+  });
+};
+
+export const showProviderRegistrationModal = async (interaction: TicketPromptInteraction) => {
   const modal = new ModalBuilder().setTitle('Provider Registration').setCustomId('provider-registration-modal');
   modal.addComponents(
     new ActionRowBuilder<TextInputBuilder>().addComponents(
@@ -69,7 +171,7 @@ export const showProviderRegistrationModal = async (interaction: StringSelectMen
   await interaction.showModal(modal);
 };
 
-export const showServiceRequestModal = async (interaction: StringSelectMenuInteraction) => {
+export const showServiceRequestModal = async (interaction: TicketPromptInteraction) => {
   const modal = new ModalBuilder().setTitle('Service Request').setCustomId('service-request-modal');
   modal.addComponents(
     new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('serviceType').setLabel('Service Type').setStyle(TextInputStyle.Short).setRequired(true)),
@@ -82,8 +184,8 @@ export const showServiceRequestModal = async (interaction: StringSelectMenuInter
   await interaction.showModal(modal);
 };
 
-export const showPartnershipModal = async (interaction: StringSelectMenuInteraction) => {
-  const modal = new ModalBuilder().setTitle('SMP Partnership').setCustomId('partnership-modal');
+export const showPartnershipModal = async (interaction: TicketPromptInteraction, type: 'basic' | 'paid') => {
+  const modal = new ModalBuilder().setTitle(type === 'paid' ? 'Paid Partnership' : 'Basic Partnership').setCustomId(`partnership-modal:${type}`);
   modal.addComponents(
     new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('serverName').setLabel('Server Name').setStyle(TextInputStyle.Short).setRequired(true)),
     new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('description').setLabel('Description').setStyle(TextInputStyle.Paragraph).setRequired(true)),
@@ -95,21 +197,32 @@ export const showPartnershipModal = async (interaction: StringSelectMenuInteract
   await interaction.showModal(modal);
 };
 
+export const showSupportModal = async (interaction: TicketPromptInteraction) => {
+  const modal = new ModalBuilder().setTitle('Support Ticket').setCustomId('support-ticket-modal');
+  modal.addComponents(
+    new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('subject').setLabel('Subject').setStyle(TextInputStyle.Short).setRequired(true)),
+    new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('details').setLabel('What do you need help with?').setStyle(TextInputStyle.Paragraph).setRequired(true))
+  );
+
+  await interaction.showModal(modal);
+};
+
 export const handleTicketModalSubmission = async (interaction: ModalSubmitInteraction) => {
-  if (!interaction.guild) {
-    return;
-  }
+  if (!interaction.guild) return;
+
+  console.log(`[ticket] Modal submitted: ${interaction.customId} by ${interaction.user.tag} (${interaction.user.id})`);
 
   if (interaction.customId === 'provider-registration-modal') {
     const serviceType = interaction.fields.getTextInputValue('serviceType').toLowerCase() as ServiceType;
     if (!SERVICE_TYPES.includes(serviceType)) {
-      await interaction.reply({ content: `Invalid service type. Use one of: ${SERVICE_TYPES.join(', ')}`, ephemeral: true });
+      await interaction.reply({ content: `Invalid service type. Use one of: ${SERVICE_TYPES.join(', ')}`, flags: MessageFlags.Ephemeral });
       return;
     }
 
     const channel = await interaction.guild.channels.create({
       name: `provider-register-${interaction.user.username.toLowerCase().replace(/[^a-z0-9-]/g, '')}`,
       type: ChannelType.GuildText,
+      parent: ticketChannelConfig.service,
       permissionOverwrites: [
         { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
@@ -117,14 +230,7 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
       ]
     });
 
-    const ticket = await prisma.ticket.create({
-      data: {
-        discordChannelId: channel.id,
-        ticketType: 'provider_registration',
-        creatorId: interaction.user.id,
-        status: 'Open'
-      }
-    });
+    const ticket = await prisma.ticket.create({ data: { discordChannelId: channel.id, ticketType: 'provider_registration', creatorId: interaction.user.id, status: 'Open' } });
 
     await channel.send(`Provider registration ticket created for <@${interaction.user.id}>.`);
     await prisma.provider.upsert({
@@ -143,7 +249,8 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
       }
     });
 
-    await interaction.reply({ content: `Ticket created: <#${channel.id}>`, ephemeral: true });
+    console.log(`[ticket] Created provider registration ticket ${ticket.id} in #${channel.id}`);
+    await interaction.reply({ content: `Ticket created: <#${channel.id}>`, flags: MessageFlags.Ephemeral });
     const transcript = await fetchTranscriptChannel(interaction, 'support');
     await transcript?.send({ embeds: [createTicketLogEmbed('Provider Registration Ticket Opened', `Ticket: ${ticket.id}\nUser: <@${interaction.user.id}>\nChannel: <#${channel.id}>`)] });
     return;
@@ -153,13 +260,14 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
     const providerDiscordId = interaction.fields.getTextInputValue('providerId');
     const provider = await prisma.provider.findUnique({ where: { discordId: providerDiscordId } });
     if (!provider) {
-      await interaction.reply({ content: 'Provider not registered.', ephemeral: true });
+      await interaction.reply({ content: 'Provider not registered. Ask them to register via the provider application flow first.', flags: MessageFlags.Ephemeral });
       return;
     }
 
     const channel = await interaction.guild.channels.create({
       name: `service-request-${interaction.user.username.toLowerCase().replace(/[^a-z0-9-]/g, '')}`,
       type: ChannelType.GuildText,
+      parent: ticketChannelConfig.service,
       permissionOverwrites: [
         { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
@@ -168,14 +276,7 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
       ]
     });
 
-    const ticket = await prisma.ticket.create({
-      data: {
-        discordChannelId: channel.id,
-        ticketType: 'service_request',
-        creatorId: interaction.user.id,
-        status: 'Open'
-      }
-    });
+    const ticket = await prisma.ticket.create({ data: { discordChannelId: channel.id, ticketType: 'service_request', creatorId: interaction.user.id, status: 'Open' } });
 
     const budget = safeNumber(interaction.fields.getTextInputValue('budget'));
     await prisma.deal.create({
@@ -191,18 +292,21 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
       }
     });
 
+    console.log(`[ticket] Created service request ticket ${ticket.id} in #${channel.id}`);
     await channel.send(`Service request opened by <@${interaction.user.id}> with provider <@${providerDiscordId}>.`);
-    await interaction.reply({ content: `Ticket created: <#${channel.id}>`, ephemeral: true });
+    await interaction.reply({ content: `Ticket created: <#${channel.id}>`, flags: MessageFlags.Ephemeral });
     const transcript = await fetchTranscriptChannel(interaction, 'service');
     await transcript?.send({ embeds: [createTicketLogEmbed('Service Request Opened', `Ticket: ${ticket.id}\nCustomer: <@${interaction.user.id}>\nProvider: <@${providerDiscordId}>\nChannel: <#${channel.id}>`)] });
     return;
   }
 
-  if (interaction.customId === 'partnership-modal') {
+  if (interaction.customId.startsWith('partnership-modal:')) {
+    const partnershipType = interaction.customId.endsWith(':paid') ? 'paid' : 'basic';
     const serverName = interaction.fields.getTextInputValue('serverName');
     const channel = await interaction.guild.channels.create({
-      name: `partnership-${serverName.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 40)}`,
+      name: `partnership-${partnershipType}-${serverName.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 32)}`,
       type: ChannelType.GuildText,
+      parent: ticketChannelConfig.partnership,
       permissionOverwrites: [
         { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
@@ -210,14 +314,7 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
       ]
     });
 
-    const ticket = await prisma.ticket.create({
-      data: {
-        discordChannelId: channel.id,
-        ticketType: 'smp_partnership',
-        creatorId: interaction.user.id,
-        status: 'Open'
-      }
-    });
+    const ticket = await prisma.ticket.create({ data: { discordChannelId: channel.id, ticketType: `smp_partnership_${partnershipType}`, creatorId: interaction.user.id, status: 'Open' } });
 
     await prisma.smpPartnership.create({
       data: {
@@ -226,23 +323,39 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
         description: interaction.fields.getTextInputValue('description'),
         memberCount: Number.parseInt(interaction.fields.getTextInputValue('memberCount'), 10) || 0,
         inviteLink: interaction.fields.getTextInputValue('inviteLink'),
-        proposal: interaction.fields.getTextInputValue('proposal'),
+        proposal: `[${partnershipType.toUpperCase()}]\n${interaction.fields.getTextInputValue('proposal')}`,
         status: 'Pending'
       }
     });
 
-    await interaction.reply({ content: `Partnership ticket created: <#${channel.id}>`, ephemeral: true });
+    console.log(`[ticket] Created ${partnershipType} partnership ticket ${ticket.id} in #${channel.id}`);
+    await interaction.reply({ content: `Partnership ticket created: <#${channel.id}>`, flags: MessageFlags.Ephemeral });
     const transcript = await fetchTranscriptChannel(interaction, 'partnership');
-    await transcript?.send({ embeds: [createTicketLogEmbed('SMP Partnership Ticket Opened', `Ticket: ${ticket.id}\nCreator: <@${interaction.user.id}>\nChannel: <#${channel.id}>`)] });
+    await transcript?.send({ embeds: [createTicketLogEmbed('SMP Partnership Ticket Opened', `Type: ${partnershipType}\nTicket: ${ticket.id}\nCreator: <@${interaction.user.id}>\nChannel: <#${channel.id}>`)] });
+    return;
   }
-};
 
-export const sendTicketPanel = async (interaction: ChatInputCommandInteraction) => {
-  await interaction.reply({ content: 'Ticket panel posted.', ephemeral: true });
-  if (interaction.channel?.isTextBased() && 'send' in interaction.channel) {
-    await interaction.channel.send({
-      content: 'Open a ticket using the dropdown below:',
-      components: [createTicketEntryMenu()]
+  if (interaction.customId === 'support-ticket-modal') {
+    const subject = interaction.fields.getTextInputValue('subject');
+    const details = interaction.fields.getTextInputValue('details');
+
+    const channel = await interaction.guild.channels.create({
+      name: `support-${interaction.user.username.toLowerCase().replace(/[^a-z0-9-]/g, '')}`,
+      type: ChannelType.GuildText,
+      parent: ticketChannelConfig.support,
+      permissionOverwrites: [
+        { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+        { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+        { id: env.SR_MOD_PLUS_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+      ]
     });
+
+    const ticket = await prisma.ticket.create({ data: { discordChannelId: channel.id, ticketType: 'support', creatorId: interaction.user.id, status: 'Open' } });
+
+    await channel.send(`Support ticket opened by <@${interaction.user.id}>.\n**Subject:** ${subject}\n**Details:** ${details}`);
+    console.log(`[ticket] Created support ticket ${ticket.id} in #${channel.id}`);
+    await interaction.reply({ content: `Support ticket created: <#${channel.id}>`, flags: MessageFlags.Ephemeral });
+    const transcript = await fetchTranscriptChannel(interaction, 'support');
+    await transcript?.send({ embeds: [createTicketLogEmbed('Support Ticket Opened', `Ticket: ${ticket.id}\nCreator: <@${interaction.user.id}>\nChannel: <#${channel.id}>`)] });
   }
 };

@@ -15,6 +15,9 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
 
   SERVICE_TICKETS_CHANNEL_ID: z.string().min(1),
+  PARTNER_TICKETS_CHANNEL_ID: optionalString,
+  SUPPORT_TICKETS_CHANNEL_ID: optionalString,
+
   SUPPORT_TRANSCRIPTS_CHANNEL_ID: optionalString,
   PARTNERSHIP_TRANSCRIPTS_CHANNEL_ID: optionalString,
   SERVICE_TRANSCRIPTS_CHANNEL_ID: optionalString,
@@ -44,4 +47,10 @@ export const transcriptConfig = {
   support: env.SUPPORT_TRANSCRIPTS_CHANNEL_ID ?? env.TRANSCRIPTS_CHANNEL_ID,
   service: env.SERVICE_TRANSCRIPTS_CHANNEL_ID ?? env.TRANSCRIPTS_CHANNEL_ID,
   partnership: env.PARTNERSHIP_TRANSCRIPTS_CHANNEL_ID ?? env.TRANSCRIPTS_CHANNEL_ID
+};
+
+export const ticketChannelConfig = {
+  service: env.SERVICE_TICKETS_CHANNEL_ID,
+  partnership: env.PARTNER_TICKETS_CHANNEL_ID ?? env.SERVICE_TICKETS_CHANNEL_ID,
+  support: env.SUPPORT_TICKETS_CHANNEL_ID ?? env.SERVICE_TICKETS_CHANNEL_ID
 };

@@ -1,6 +1,15 @@
-import { Events, type Client, type StringSelectMenuInteraction } from 'discord.js';
+import { DiscordAPIError, Events, MessageFlags, type Client, type StringSelectMenuInteraction } from 'discord.js';
 import { handleCommand } from '../services/commandService.js';
-import { handleTicketModalSubmission, showPartnershipModal, showProviderRegistrationModal, showServiceRequestModal, createTicketEntryMenu } from '../services/ticketService.js';
+import {
+  createPartnershipTypeMenu,
+  createServiceTicketTypeMenu,
+  handleTicketModalSubmission,
+  postTicketPanels,
+  showPartnershipModal,
+  showProviderRegistrationModal,
+  showServiceRequestModal,
+  showSupportModal
+} from '../services/ticketService.js';
 import { prisma } from '../services/prisma.js';
 import { createProviderAdEmbed, createTicketLogEmbed } from '../services/embedFactory.js';
 import { parseRateModalDealId } from '../utils/customIds.js';
@@ -8,42 +17,98 @@ import { parseRateModalDealId } from '../utils/customIds.js';
 export const registerInteractionCreateEvent = (client: Client) => {
   client.on(Events.InteractionCreate, async (interaction) => {
     try {
+      console.log(`[interaction] type=${interaction.type} user=${interaction.user?.tag ?? 'unknown'} id=${interaction.id}`);
+
       if (interaction.isChatInputCommand()) {
+        console.log(`[interaction] chat command: /${interaction.commandName}`);
         if (interaction.commandName === 'ticket-panel') {
-          if (interaction.channel?.isTextBased() && 'send' in interaction.channel) {
-            await interaction.channel.send({ content: 'Open a ticket using the dropdown below:', components: [createTicketEntryMenu()] });
-          }
-          await interaction.reply({ content: 'Ticket panel posted.', ephemeral: true });
+          await postTicketPanels(interaction);
           return;
         }
+
         await handleCommand(interaction);
         return;
       }
 
-      if (interaction.isStringSelectMenu() && interaction.customId === 'ticket-entry-select') {
-        const selection = interaction.values[0];
-        if (selection === 'provider_registration') {
-          await showProviderRegistrationModal(interaction as StringSelectMenuInteraction);
+      if (interaction.isButton()) {
+        console.log(`[interaction] button: ${interaction.customId}`);
+        if (interaction.customId === 'open-service-ticket') {
+          await interaction.reply({ content: 'Choose the service ticket type:', components: [createServiceTicketTypeMenu()], flags: MessageFlags.Ephemeral });
           return;
         }
-        if (selection === 'service_request') {
-          await showServiceRequestModal(interaction as StringSelectMenuInteraction);
+
+        if (interaction.customId === 'open-partner-ticket') {
+          await interaction.reply({ content: 'Choose the partnership type:', components: [createPartnershipTypeMenu()], flags: MessageFlags.Ephemeral });
           return;
         }
-        if (selection === 'smp_partnership') {
-          await showPartnershipModal(interaction as StringSelectMenuInteraction);
+
+        if (interaction.customId === 'open-support-ticket') {
+          await showSupportModal(interaction);
+          return;
+        }
+      }
+
+      if (interaction.isStringSelectMenu()) {
+        console.log(`[interaction] select menu: ${interaction.customId} value=${interaction.values[0] ?? 'none'}`);
+
+        if (interaction.customId === 'ticket-entry-select') {
+          const selection = interaction.values[0];
+          if (selection === 'service_tickets') {
+            await interaction.reply({ content: 'Choose the service ticket type:', components: [createServiceTicketTypeMenu()], flags: MessageFlags.Ephemeral });
+            return;
+          }
+
+          if (selection === 'partner_tickets') {
+            await interaction.reply({ content: 'Choose the partnership type:', components: [createPartnershipTypeMenu()], flags: MessageFlags.Ephemeral });
+            return;
+          }
+
+          if (selection === 'support_ticket') {
+            await showSupportModal(interaction as StringSelectMenuInteraction);
+            return;
+          }
+
+          await interaction.reply({ content: 'Unknown ticket option selected. Please try again and choose a listed option.', flags: MessageFlags.Ephemeral });
+          return;
+        }
+
+        if (interaction.customId === 'service-ticket-type-select') {
+          const selection = interaction.values[0];
+          if (selection === 'provider_registration') {
+            await showProviderRegistrationModal(interaction as StringSelectMenuInteraction);
+            return;
+          }
+
+          if (selection === 'service_request') {
+            await showServiceRequestModal(interaction as StringSelectMenuInteraction);
+            return;
+          }
+
+          await interaction.reply({ content: 'Unknown service ticket type selected. Please try again.', flags: MessageFlags.Ephemeral });
+          return;
+        }
+
+        if (interaction.customId === 'partnership-ticket-type-select') {
+          const selection = interaction.values[0];
+          if (selection === 'basic' || selection === 'paid') {
+            await showPartnershipModal(interaction as StringSelectMenuInteraction, selection);
+            return;
+          }
+
+          await interaction.reply({ content: 'Unknown partnership type selected. Please choose basic or paid.', flags: MessageFlags.Ephemeral });
           return;
         }
       }
 
       if (interaction.isModalSubmit()) {
+        console.log(`[interaction] modal submit: ${interaction.customId}`);
         const rateDealId = parseRateModalDealId(interaction.customId);
         if (rateDealId) {
           const stars = Number.parseInt(interaction.fields.getTextInputValue('stars'), 10);
           const reviewText = interaction.fields.getTextInputValue('review');
           const deal = await prisma.deal.findUnique({ where: { id: rateDealId } });
           if (!deal || stars < 1 || stars > 5) {
-            await interaction.reply({ content: 'Invalid rating payload.', ephemeral: true });
+            await interaction.reply({ content: 'Invalid rating payload.', flags: MessageFlags.Ephemeral });
             return;
           }
 
@@ -99,21 +164,30 @@ export const registerInteractionCreateEvent = (client: Client) => {
             }
           }
 
-          await interaction.reply({ content: 'Thanks! Your rating has been submitted.', ephemeral: true });
+          await interaction.reply({ content: 'Thanks! Your rating has been submitted.', flags: MessageFlags.Ephemeral });
           return;
         }
 
         await handleTicketModalSubmission(interaction);
       }
     } catch (error) {
-      const content = 'An error occurred while handling this interaction.';
+      let content = 'An error occurred while handling this interaction.';
+      if (error instanceof DiscordAPIError && error.code === 50013) {
+        content = 'Discord says I am missing permissions for this action. Please check my role/channel permissions (Send Messages, View Channel, Manage Channels) and try again.';
+      } else if (error instanceof DiscordAPIError && error.code === 50001) {
+        content = 'Discord says I am missing access. Please check that I am in the server/channel and invited with the correct scopes.';
+      }
+
       if (interaction.isRepliable()) {
         if (interaction.deferred || interaction.replied) {
-          await interaction.followUp({ content, ephemeral: true });
+          await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
         } else {
-          await interaction.reply({ content, ephemeral: true });
+          await interaction.reply({ content, flags: MessageFlags.Ephemeral });
         }
       }
+
+      const errorMessage = error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}` : 'Unknown interaction error';
+      console.error(`[interaction] error for id=${interaction.id}: ${errorMessage}`);
       client.emit('warn', error instanceof Error ? error.message : 'Unknown interaction error');
     }
   });
