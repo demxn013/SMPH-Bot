@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Partials } from 'discord.js';
+import { Client, Events, GatewayIntentBits, Partials } from 'discord.js';
 import pino from 'pino';
 import { env } from './config/env.js';
 import { registerInteractionCreateEvent } from './events/interactionCreate.js';
@@ -25,16 +25,23 @@ registerThreadCreateEvent(client);
 registerMessageCreateEvent(client);
 registerGuildMemberRemoveEvent(client);
 
-client.once('ready', async () => {
+client.once(Events.ClientReady, async () => {
   logger.info(`Logged in as ${client.user?.tag}`);
 });
 
 setInterval(async () => {
-  const monthly = await prisma.deal.aggregate({
-    where: { status: 'Completed', updatedAt: { gte: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30) } },
-    _sum: { commission: true }
-  });
-  logger.info({ monthlyCommission: Number(monthly._sum.commission ?? 0) }, 'Monthly commission snapshot');
+  try {
+    const monthly = await prisma.deal.aggregate({
+      where: { status: 'Completed', updatedAt: { gte: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30) } },
+      _sum: { commission: true }
+    });
+    logger.info({ monthlyCommission: Number(monthly._sum.commission ?? 0) }, 'Monthly commission snapshot');
+  } catch (error) {
+    logger.error(
+      { err: error instanceof Error ? { message: error.message, stack: error.stack } : error },
+      'Failed to collect monthly commission snapshot'
+    );
+  }
 }, 1000 * 60 * 60 * 6);
 
 const shutdown = async () => {
