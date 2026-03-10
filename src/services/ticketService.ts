@@ -10,7 +10,6 @@ import {
   StringSelectMenuBuilder,
   TextInputBuilder,
   TextInputStyle,
-  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type GuildTextBasedChannel,
   type Interaction,
