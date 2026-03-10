@@ -13,7 +13,26 @@ import { createProviderAdEmbed } from './embedFactory.js';
 import { env } from '../config/env.js';
 
 export const commandDefinitions = [
-  new SlashCommandBuilder().setName('ticket-panel').setDescription('Post the SMP Hub ticket panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+  new SlashCommandBuilder()
+    .setName('ticket')
+    .setDescription('Ticket management commands')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addSubcommand((sub) =>
+      sub
+        .setName('panel')
+        .setDescription('Post a ticket panel embed in this channel')
+        .addStringOption((o) =>
+          o
+            .setName('type')
+            .setDescription('Which ticket panel to post')
+            .setRequired(true)
+            .addChoices(
+              { name: 'Service', value: 'service' },
+              { name: 'Support', value: 'support' },
+              { name: 'Partner', value: 'partner' }
+            )
+        )
+    ),
   new SlashCommandBuilder()
     .setName('update-ad')
     .setDescription('Update your forum ad embed')

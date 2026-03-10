@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Partials } from 'discord.js';
+import { Client, Events, GatewayIntentBits, Partials } from 'discord.js';
 import pino from 'pino';
 import { env } from './config/env.js';
 import { registerInteractionCreateEvent } from './events/interactionCreate.js';
@@ -25,7 +25,7 @@ registerThreadCreateEvent(client);
 registerMessageCreateEvent(client);
 registerGuildMemberRemoveEvent(client);
 
-client.once('ready', async () => {
+client.once(Events.ClientReady, async () => {
   logger.info(`Logged in as ${client.user?.tag}`);
 });
 
