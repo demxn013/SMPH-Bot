@@ -1,10 +1,10 @@
-import { Events, type Client, type StringSelectMenuInteraction } from 'discord.js';
+import { DiscordAPIError, Events, MessageFlags, type Client, type StringSelectMenuInteraction } from 'discord.js';
 import { handleCommand } from '../services/commandService.js';
 import {
   createPartnershipTypeMenu,
   createServiceTicketTypeMenu,
-  createTicketEntryMenu,
   handleTicketModalSubmission,
+  postTicketPanels,
   showPartnershipModal,
   showProviderRegistrationModal,
   showServiceRequestModal,
@@ -22,15 +22,30 @@ export const registerInteractionCreateEvent = (client: Client) => {
       if (interaction.isChatInputCommand()) {
         console.log(`[interaction] chat command: /${interaction.commandName}`);
         if (interaction.commandName === 'ticket-panel') {
-          if (interaction.channel?.isTextBased() && 'send' in interaction.channel) {
-            await interaction.channel.send({ content: 'Open a ticket using the dropdown below:', components: [createTicketEntryMenu()] });
-          }
-          await interaction.reply({ content: 'Ticket panel posted.', ephemeral: true });
+          await postTicketPanels(interaction);
           return;
         }
 
         await handleCommand(interaction);
         return;
+      }
+
+      if (interaction.isButton()) {
+        console.log(`[interaction] button: ${interaction.customId}`);
+        if (interaction.customId === 'open-service-ticket') {
+          await interaction.reply({ content: 'Choose the service ticket type:', components: [createServiceTicketTypeMenu()], flags: MessageFlags.Ephemeral });
+          return;
+        }
+
+        if (interaction.customId === 'open-partner-ticket') {
+          await interaction.reply({ content: 'Choose the partnership type:', components: [createPartnershipTypeMenu()], flags: MessageFlags.Ephemeral });
+          return;
+        }
+
+        if (interaction.customId === 'open-support-ticket') {
+          await showSupportModal(interaction);
+          return;
+        }
       }
 
       if (interaction.isStringSelectMenu()) {
@@ -39,12 +54,12 @@ export const registerInteractionCreateEvent = (client: Client) => {
         if (interaction.customId === 'ticket-entry-select') {
           const selection = interaction.values[0];
           if (selection === 'service_tickets') {
-            await interaction.reply({ content: 'Choose the service ticket type:', components: [createServiceTicketTypeMenu()], ephemeral: true });
+            await interaction.reply({ content: 'Choose the service ticket type:', components: [createServiceTicketTypeMenu()], flags: MessageFlags.Ephemeral });
             return;
           }
 
           if (selection === 'partner_tickets') {
-            await interaction.reply({ content: 'Choose the partnership type:', components: [createPartnershipTypeMenu()], ephemeral: true });
+            await interaction.reply({ content: 'Choose the partnership type:', components: [createPartnershipTypeMenu()], flags: MessageFlags.Ephemeral });
             return;
           }
 
@@ -52,6 +67,9 @@ export const registerInteractionCreateEvent = (client: Client) => {
             await showSupportModal(interaction as StringSelectMenuInteraction);
             return;
           }
+
+          await interaction.reply({ content: 'Unknown ticket option selected. Please try again and choose a listed option.', flags: MessageFlags.Ephemeral });
+          return;
         }
 
         if (interaction.customId === 'service-ticket-type-select') {
@@ -65,6 +83,9 @@ export const registerInteractionCreateEvent = (client: Client) => {
             await showServiceRequestModal(interaction as StringSelectMenuInteraction);
             return;
           }
+
+          await interaction.reply({ content: 'Unknown service ticket type selected. Please try again.', flags: MessageFlags.Ephemeral });
+          return;
         }
 
         if (interaction.customId === 'partnership-ticket-type-select') {
@@ -73,6 +94,9 @@ export const registerInteractionCreateEvent = (client: Client) => {
             await showPartnershipModal(interaction as StringSelectMenuInteraction, selection);
             return;
           }
+
+          await interaction.reply({ content: 'Unknown partnership type selected. Please choose basic or paid.', flags: MessageFlags.Ephemeral });
+          return;
         }
       }
 
@@ -84,7 +108,7 @@ export const registerInteractionCreateEvent = (client: Client) => {
           const reviewText = interaction.fields.getTextInputValue('review');
           const deal = await prisma.deal.findUnique({ where: { id: rateDealId } });
           if (!deal || stars < 1 || stars > 5) {
-            await interaction.reply({ content: 'Invalid rating payload.', ephemeral: true });
+            await interaction.reply({ content: 'Invalid rating payload.', flags: MessageFlags.Ephemeral });
             return;
           }
 
@@ -140,19 +164,25 @@ export const registerInteractionCreateEvent = (client: Client) => {
             }
           }
 
-          await interaction.reply({ content: 'Thanks! Your rating has been submitted.', ephemeral: true });
+          await interaction.reply({ content: 'Thanks! Your rating has been submitted.', flags: MessageFlags.Ephemeral });
           return;
         }
 
         await handleTicketModalSubmission(interaction);
       }
     } catch (error) {
-      const content = 'An error occurred while handling this interaction.';
+      let content = 'An error occurred while handling this interaction.';
+      if (error instanceof DiscordAPIError && error.code === 50013) {
+        content = 'Discord says I am missing permissions for this action. Please check my role/channel permissions (Send Messages, View Channel, Manage Channels) and try again.';
+      } else if (error instanceof DiscordAPIError && error.code === 50001) {
+        content = 'Discord says I am missing access. Please check that I am in the server/channel and invited with the correct scopes.';
+      }
+
       if (interaction.isRepliable()) {
         if (interaction.deferred || interaction.replied) {
-          await interaction.followUp({ content, ephemeral: true });
+          await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
         } else {
-          await interaction.reply({ content, ephemeral: true });
+          await interaction.reply({ content, flags: MessageFlags.Ephemeral });
         }
       }
 
