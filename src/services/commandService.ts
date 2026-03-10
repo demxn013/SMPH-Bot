@@ -5,6 +5,7 @@ import {
   TextInputStyle,
   ActionRowBuilder,
   PermissionFlagsBits,
+  MessageFlags,
   type ChatInputCommandInteraction
 } from 'discord.js';
 import { prisma } from './prisma.js';
@@ -12,8 +13,29 @@ import { calculateCommission } from './commissionService.js';
 import { createProviderAdEmbed } from './embedFactory.js';
 import { env } from '../config/env.js';
 
+const ticketCommand = new SlashCommandBuilder()
+  .setName('ticket')
+  .setDescription('Ticket management commands')
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName('panel')
+      .setDescription('Post a ticket panel embed in this channel')
+      .addStringOption((option) =>
+        option
+          .setName('type')
+          .setDescription('Which ticket panel to post')
+          .setRequired(true)
+          .addChoices(
+            { name: 'Service', value: 'service' },
+            { name: 'Support', value: 'support' },
+            { name: 'Partner', value: 'partner' }
+          )
+      )
+  );
+
 export const commandDefinitions = [
-  new SlashCommandBuilder().setName('ticket-panel').setDescription('Post the SMP Hub ticket panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+  ticketCommand,
   new SlashCommandBuilder()
     .setName('update-ad')
     .setDescription('Update your forum ad embed')
@@ -50,13 +72,13 @@ export const handleCommand = async (interaction: ChatInputCommandInteraction) =>
     const provider = await prisma.provider.findUnique({ where: { discordId: interaction.user.id } });
     const service = provider ? await prisma.providerService.findFirst({ where: { providerId: provider.id }, orderBy: { createdAt: 'asc' } }) : null;
     if (!provider || !service || !service.adEmbedMessageId) {
-      await interaction.reply({ content: 'No ad record found for your account.', ephemeral: true });
+      await interaction.reply({ content: 'No ad record found for your account.', flags: MessageFlags.Ephemeral });
       return;
     }
 
     const thread = await interaction.guild?.channels.fetch(provider.forumThreadId ?? '');
     if (!thread?.isTextBased()) {
-      await interaction.reply({ content: 'Unable to find your ad thread.', ephemeral: true });
+      await interaction.reply({ content: 'Unable to find your ad thread.', flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -76,7 +98,7 @@ export const handleCommand = async (interaction: ChatInputCommandInteraction) =>
       ]
     });
 
-    await interaction.reply({ content: 'Ad updated.', ephemeral: true });
+    await interaction.reply({ content: 'Ad updated.', flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -84,7 +106,7 @@ export const handleCommand = async (interaction: ChatInputCommandInteraction) =>
     const amount = interaction.options.getNumber('amount', true);
     const ticket = await getTicketWithDeal(interaction.channelId);
     if (!ticket || ticket.ticketType !== 'service_request' || !ticket.deals[0]) {
-      await interaction.reply({ content: 'No active service deal in this channel.', ephemeral: true });
+      await interaction.reply({ content: 'No active service deal in this channel.', flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -107,7 +129,7 @@ export const handleCommand = async (interaction: ChatInputCommandInteraction) =>
     const ticket = await getTicketWithDeal(interaction.channelId);
     const deal = ticket?.deals[0];
     if (!deal) {
-      await interaction.reply({ content: 'No deal found in this channel.', ephemeral: true });
+      await interaction.reply({ content: 'No deal found in this channel.', flags: MessageFlags.Ephemeral });
       return;
     }
     await interaction.reply(`Deal status: **${deal.status}**\nPrice: **$${Number(deal.price).toFixed(2)}**\nCommission: **$${Number(deal.commission).toFixed(2)}**\nNet: **$${Number(deal.netAmount).toFixed(2)}**`);
@@ -118,7 +140,7 @@ export const handleCommand = async (interaction: ChatInputCommandInteraction) =>
     const ticket = await getTicketWithDeal(interaction.channelId);
     const deal = ticket?.deals[0];
     if (!deal) {
-      await interaction.reply({ content: 'No deal found in this channel.', ephemeral: true });
+      await interaction.reply({ content: 'No deal found in this channel.', flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -133,7 +155,7 @@ export const handleCommand = async (interaction: ChatInputCommandInteraction) =>
     const ticket = await getTicketWithDeal(interaction.channelId);
     const deal = ticket?.deals[0];
     if (!deal) {
-      await interaction.reply({ content: 'No deal found in this channel.', ephemeral: true });
+      await interaction.reply({ content: 'No deal found in this channel.', flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -152,7 +174,7 @@ export const handleCommand = async (interaction: ChatInputCommandInteraction) =>
       await interaction.reply(`Deal completed. <@${deal.customerId}> please run "/deal-info" if you need details. Sending rating prompt via DM.`);
       const dm = await customerMember.createDM();
       await dm.send('Your SMP Hub deal is complete. Please use the attached modal to rate the provider.');
-      await interaction.followUp({ content: 'Unable to present modal in DM automatically. Ask the customer to use /rate command in channel if needed.', ephemeral: true });
+      await interaction.followUp({ content: 'Unable to present modal in DM automatically. Ask the customer to use /rate command in channel if needed.', flags: MessageFlags.Ephemeral });
     } else {
       await interaction.reply('Deal completed, but customer is unavailable for rating prompt.');
     }
@@ -162,7 +184,7 @@ export const handleCommand = async (interaction: ChatInputCommandInteraction) =>
   if (commandName === 'approve-provider' || commandName === 'reject-provider') {
     const ticket = await prisma.ticket.findFirst({ where: { discordChannelId: interaction.channelId, ticketType: 'provider_registration', status: 'Open' } });
     if (!ticket) {
-      await interaction.reply({ content: 'No open provider registration ticket in this channel.', ephemeral: true });
+      await interaction.reply({ content: 'No open provider registration ticket in this channel.', flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -189,7 +211,7 @@ export const handleCommand = async (interaction: ChatInputCommandInteraction) =>
     const user = interaction.options.getUser('user', true);
     const provider = await prisma.provider.findUnique({ where: { discordId: user.id } });
     if (!provider) {
-      await interaction.reply({ content: 'Provider not found.', ephemeral: true });
+      await interaction.reply({ content: 'Provider not found.', flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -213,6 +235,6 @@ export const handleCommand = async (interaction: ChatInputCommandInteraction) =>
     if (interaction.channel?.isTextBased() && 'send' in interaction.channel) {
       await interaction.channel.send({ content: 'Use the dropdown below to open a ticket.' });
     }
-    await interaction.reply({ content: 'Ticket panel helper message posted. Use /setup-ticket-panel for full panel.', ephemeral: true });
+    await interaction.reply({ content: 'Ticket panel helper message posted. Use /setup-ticket-panel for full panel.', flags: MessageFlags.Ephemeral });
   }
 };
