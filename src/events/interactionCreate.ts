@@ -5,7 +5,6 @@ import {
   createServiceTicketTypeMenu,
   handleTicketModalSubmission,
   postTicketPanelByType,
-  postTicketPanels,
   showPartnershipModal,
   showProviderRegistrationModal,
   showServiceRequestModal,
@@ -34,10 +33,6 @@ export const registerInteractionCreateEvent = (client: Client) => {
         if (interaction.commandName === 'ticket-panel') {
           const type = interaction.options.getString('type', true) as 'service' | 'support' | 'partner';
           await postTicketPanelByType(interaction, type);
-        if (interaction.commandName === 'ticket-panel') {
-          const type = interaction.options.getString('type', true) as 'service' | 'support' | 'partner';
-          await postTicketPanelByType(interaction, type);
-          await postTicketPanels(interaction);
           return;
         }
 
@@ -80,25 +75,6 @@ export const registerInteractionCreateEvent = (client: Client) => {
           }
 
           await interaction.reply({ content: 'Unknown ticket option selected. Please try again and choose a listed option.', flags: MessageFlags.Ephemeral });
-          return;
-        }
-
-        if (interaction.customId === 'service-ticket-type-select') {
-          const selection = interaction.values[0];
-          if (selection === 'provider_registration') {
-            await showProviderRegistrationModal(interaction as StringSelectMenuInteraction);
-            return;
-          }
-
-          if (selection === 'service_request') {
-            await showServiceRequestModal(interaction as StringSelectMenuInteraction);
-            return;
-          }
-
-          await interaction.reply({ content: 'Unknown service ticket type selected. Please try again.', flags: MessageFlags.Ephemeral });
-          return;
-        }
-
           return;
         }
 
@@ -233,18 +209,6 @@ export const registerInteractionCreateEvent = (client: Client) => {
         }
       }
 
-        }
-      }
-
-        if (interaction.deferred || interaction.replied) {
-          await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
-        } else {
-          await interaction.reply({ content, flags: MessageFlags.Ephemeral });
-        }
-      }
-
-      const errorMessage = error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}` : 'Unknown interaction error';
-      console.error(`[interaction] error for id=${interaction.id}: ${errorMessage}`);
       client.emit('warn', error instanceof Error ? error.message : 'Unknown interaction error');
     }
   });

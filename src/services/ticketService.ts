@@ -72,18 +72,6 @@ export const createPartnershipTypeMenu = () => {
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 };
 
-export const createPartnershipTypeMenu = () => {
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId('partnership-ticket-type-select')
-    .setPlaceholder('Choose a partnership type')
-    .addOptions(
-      { label: 'Basic Partnership', value: 'basic' },
-      { label: 'Paid Partnership', value: 'paid' }
-    );
-
-  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
-};
-
 const createOpenTicketButton = (customId: string, label: string) =>
   new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(ButtonStyle.Primary));
 
@@ -139,56 +127,6 @@ export const postTicketPanelByType = async (
 
   await interaction.reply({
     content: `Posted the **${panelType}** ticket embed in this channel.`,
-export const postTicketPanels = async (interaction: ChatInputCommandInteraction) => {
-  if (!interaction.guild) {
-    await interaction.reply({ content: 'This command can only be used in a server.', flags: MessageFlags.Ephemeral });
-    return;
-  }
-
-  const panels = [
-    {
-      key: 'service',
-      channelId: ticketChannelConfig.service,
-      embed: createServiceTicketPanelEmbed(),
-      components: [createServiceTicketTypeMenu()]
-    },
-    {
-      key: 'partnership',
-      channelId: ticketChannelConfig.partnership,
-      embed: createPartnerTicketPanelEmbed(),
-      components: [createPartnershipTypeMenu()]
-    },
-    {
-      key: 'support',
-      channelId: ticketChannelConfig.support,
-      embed: createSupportTicketPanelEmbed(),
-      components: [createOpenTicketButton('open-support-ticket', 'Open Support Ticket')]
-    }
-  ] as const;
-
-  const results: string[] = [];
-
-  for (const panel of panels) {
-    const channel = await interaction.guild.channels.fetch(panel.channelId).catch(() => null);
-    if (!channel?.isTextBased()) {
-      results.push(`❌ ${panel.key}: channel not found or not text-based (${panel.channelId})`);
-      continue;
-    }
-
-    const canCheck = 'permissionsFor' in channel;
-    const botMember = interaction.guild.members.me;
-    const canSend = canCheck && botMember ? channel.permissionsFor(botMember).has(PermissionFlagsBits.SendMessages) : false;
-    if (!canSend) {
-      results.push(`❌ ${panel.key}: missing Send Messages in <#${panel.channelId}>`);
-      continue;
-    }
-
-    await channel.send({ embeds: [panel.embed], components: panel.components });
-    results.push(`✅ ${panel.key}: posted in <#${panel.channelId}>`);
-  }
-
-  await interaction.reply({
-    content: `Ticket panels finished:\n${results.join('\n')}\n\nFix any ❌ issues (channel ID or permissions) and run /ticket-panel again.`,
     flags: MessageFlags.Ephemeral
   });
 };
