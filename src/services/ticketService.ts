@@ -10,7 +10,6 @@ import {
   StringSelectMenuBuilder,
   TextInputBuilder,
   TextInputStyle,
-  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type GuildTextBasedChannel,
   type Interaction,
@@ -94,40 +93,56 @@ const createSupportTicketPanelEmbed = () =>
     .setDescription('Need help? Click below to open a regular support ticket.')
     .setColor(0xfee75c);
 
-export const postTicketPanelByType = async (
-  interaction: ChatInputCommandInteraction,
-  panelType: 'service' | 'support' | 'partner'
-) => {
-  if (!interaction.channel?.isTextBased() || !('send' in interaction.channel)) {
-    await interaction.reply({
-      content: 'This command must be used in a server text channel.',
-      flags: MessageFlags.Ephemeral
-    });
+export const postTicketPanels = async (interaction: ChatInputCommandInteraction) => {
+  if (!interaction.guild) {
+    await interaction.reply({ content: 'This command can only be used in a server.', flags: MessageFlags.Ephemeral });
     return;
   }
 
-  const payloadByType = {
-    service: {
+  const panels = [
+    {
+      key: 'service',
+      channelId: ticketChannelConfig.service,
       embed: createServiceTicketPanelEmbed(),
       components: [createServiceTicketTypeMenu()]
     },
-    partner: {
+    {
+      key: 'partnership',
+      channelId: ticketChannelConfig.partnership,
       embed: createPartnerTicketPanelEmbed(),
       components: [createPartnershipTypeMenu()]
     },
-    support: {
+    {
+      key: 'support',
+      channelId: ticketChannelConfig.support,
       embed: createSupportTicketPanelEmbed(),
       components: [createOpenTicketButton('open-support-ticket', 'Open Support Ticket')]
     }
-  } as const;
+  ] as const;
 
-  await interaction.channel.send({
-    embeds: [payloadByType[panelType].embed],
-    components: payloadByType[panelType].components
-  });
+  const results: string[] = [];
+
+  for (const panel of panels) {
+    const channel = await interaction.guild.channels.fetch(panel.channelId).catch(() => null);
+    if (!channel?.isTextBased()) {
+      results.push(`❌ ${panel.key}: channel not found or not text-based (${panel.channelId})`);
+      continue;
+    }
+
+    const canCheck = 'permissionsFor' in channel;
+    const botMember = interaction.guild.members.me;
+    const canSend = canCheck && botMember ? channel.permissionsFor(botMember).has(PermissionFlagsBits.SendMessages) : false;
+    if (!canSend) {
+      results.push(`❌ ${panel.key}: missing Send Messages in <#${panel.channelId}>`);
+      continue;
+    }
+
+    await channel.send({ embeds: [panel.embed], components: panel.components });
+    results.push(`✅ ${panel.key}: posted in <#${panel.channelId}>`);
+  }
 
   await interaction.reply({
-    content: `Posted the **${panelType}** ticket embed in this channel.`,
+    content: `Ticket panels finished:\n${results.join('\n')}\n\nFix any ❌ issues (channel ID or permissions) and run /ticket-panel again.`,
     flags: MessageFlags.Ephemeral
   });
 };

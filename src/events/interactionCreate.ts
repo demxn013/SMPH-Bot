@@ -4,7 +4,7 @@ import {
   createPartnershipTypeMenu,
   createServiceTicketTypeMenu,
   handleTicketModalSubmission,
-  postTicketPanelByType,
+  postTicketPanels,
   showPartnershipModal,
   showProviderRegistrationModal,
   showServiceRequestModal,
@@ -22,8 +22,7 @@ export const registerInteractionCreateEvent = (client: Client) => {
       if (interaction.isChatInputCommand()) {
         console.log(`[interaction] chat command: /${interaction.commandName}`);
         if (interaction.commandName === 'ticket-panel') {
-          const type = interaction.options.getString('type', true) as 'service' | 'support' | 'partner';
-          await postTicketPanelByType(interaction, type);
+          await postTicketPanels(interaction);
           return;
         }
 
