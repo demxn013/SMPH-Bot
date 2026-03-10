@@ -22,6 +22,18 @@ export const registerInteractionCreateEvent = (client: Client) => {
 
       if (interaction.isChatInputCommand()) {
         console.log(`[interaction] chat command: /${interaction.commandName}`);
+        if (interaction.commandName === 'ticket') {
+          const subcommand = interaction.options.getSubcommand(false);
+          if (subcommand === 'panel') {
+            const type = interaction.options.getString('type', true) as 'service' | 'support' | 'partner';
+            await postTicketPanelByType(interaction, type);
+            return;
+          }
+        }
+
+        if (interaction.commandName === 'ticket-panel') {
+          const type = interaction.options.getString('type', true) as 'service' | 'support' | 'partner';
+          await postTicketPanelByType(interaction, type);
         if (interaction.commandName === 'ticket-panel') {
           const type = interaction.options.getString('type', true) as 'service' | 'support' | 'partner';
           await postTicketPanelByType(interaction, type);
@@ -68,6 +80,25 @@ export const registerInteractionCreateEvent = (client: Client) => {
           }
 
           await interaction.reply({ content: 'Unknown ticket option selected. Please try again and choose a listed option.', flags: MessageFlags.Ephemeral });
+          return;
+        }
+
+        if (interaction.customId === 'service-ticket-type-select') {
+          const selection = interaction.values[0];
+          if (selection === 'provider_registration') {
+            await showProviderRegistrationModal(interaction as StringSelectMenuInteraction);
+            return;
+          }
+
+          if (selection === 'service_request') {
+            await showServiceRequestModal(interaction as StringSelectMenuInteraction);
+            return;
+          }
+
+          await interaction.reply({ content: 'Unknown service ticket type selected. Please try again.', flags: MessageFlags.Ephemeral });
+          return;
+        }
+
           return;
         }
 
@@ -199,6 +230,9 @@ export const registerInteractionCreateEvent = (client: Client) => {
           } else {
             throw responseError;
           }
+        }
+      }
+
         }
       }
 
