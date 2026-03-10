@@ -72,6 +72,18 @@ export const createPartnershipTypeMenu = () => {
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 };
 
+export const createPartnershipTypeMenu = () => {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId('partnership-ticket-type-select')
+    .setPlaceholder('Choose a partnership type')
+    .addOptions(
+      { label: 'Basic Partnership', value: 'basic' },
+      { label: 'Paid Partnership', value: 'paid' }
+    );
+
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
+};
+
 const createOpenTicketButton = (customId: string, label: string) =>
   new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(ButtonStyle.Primary));
 
@@ -93,6 +105,40 @@ const createSupportTicketPanelEmbed = () =>
     .setDescription('Need help? Click below to open a regular support ticket.')
     .setColor(0xfee75c);
 
+export const postTicketPanelByType = async (
+  interaction: ChatInputCommandInteraction,
+  panelType: 'service' | 'support' | 'partner'
+) => {
+  if (!interaction.channel?.isTextBased() || !('send' in interaction.channel)) {
+    await interaction.reply({
+      content: 'This command must be used in a server text channel.',
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
+  const payloadByType = {
+    service: {
+      embed: createServiceTicketPanelEmbed(),
+      components: [createServiceTicketTypeMenu()]
+    },
+    partner: {
+      embed: createPartnerTicketPanelEmbed(),
+      components: [createPartnershipTypeMenu()]
+    },
+    support: {
+      embed: createSupportTicketPanelEmbed(),
+      components: [createOpenTicketButton('open-support-ticket', 'Open Support Ticket')]
+    }
+  } as const;
+
+  await interaction.channel.send({
+    embeds: [payloadByType[panelType].embed],
+    components: payloadByType[panelType].components
+  });
+
+  await interaction.reply({
+    content: `Posted the **${panelType}** ticket embed in this channel.`,
 export const postTicketPanels = async (interaction: ChatInputCommandInteraction) => {
   if (!interaction.guild) {
     await interaction.reply({ content: 'This command can only be used in a server.', flags: MessageFlags.Ephemeral });

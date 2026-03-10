@@ -4,6 +4,7 @@ import {
   createPartnershipTypeMenu,
   createServiceTicketTypeMenu,
   handleTicketModalSubmission,
+  postTicketPanelByType,
   postTicketPanels,
   showPartnershipModal,
   showProviderRegistrationModal,
@@ -22,6 +23,8 @@ export const registerInteractionCreateEvent = (client: Client) => {
       if (interaction.isChatInputCommand()) {
         console.log(`[interaction] chat command: /${interaction.commandName}`);
         if (interaction.commandName === 'ticket-panel') {
+          const type = interaction.options.getString('type', true) as 'service' | 'support' | 'partner';
+          await postTicketPanelByType(interaction, type);
           await postTicketPanels(interaction);
           return;
         }
@@ -167,6 +170,15 @@ export const registerInteractionCreateEvent = (client: Client) => {
         await handleTicketModalSubmission(interaction);
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}` : 'Unknown interaction error';
+      console.error(`[interaction] error for id=${interaction.id}: ${errorMessage}`);
+
+      if (error instanceof DiscordAPIError && error.code === 40060) {
+        console.warn(`[interaction] interaction ${interaction.id} was already acknowledged; skipping second response.`);
+        client.emit('warn', error instanceof Error ? error.message : 'Unknown interaction error');
+        return;
+      }
+
       let content = 'An error occurred while handling this interaction.';
       if (error instanceof DiscordAPIError && error.code === 50013) {
         content = 'Discord says I am missing permissions for this action. Please check my role/channel permissions (Send Messages, View Channel, Manage Channels) and try again.';
@@ -175,6 +187,21 @@ export const registerInteractionCreateEvent = (client: Client) => {
       }
 
       if (interaction.isRepliable()) {
+        try {
+          if (interaction.deferred || interaction.replied) {
+            await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
+          } else {
+            await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+          }
+        } catch (responseError) {
+          if (responseError instanceof DiscordAPIError && responseError.code === 40060) {
+            console.warn(`[interaction] response for ${interaction.id} was already acknowledged while handling an error.`);
+          } else {
+            throw responseError;
+          }
+        }
+      }
+
         if (interaction.deferred || interaction.replied) {
           await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
         } else {
