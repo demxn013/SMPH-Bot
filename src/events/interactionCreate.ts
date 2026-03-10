@@ -1,6 +1,15 @@
 import { Events, type Client, type StringSelectMenuInteraction } from 'discord.js';
 import { handleCommand } from '../services/commandService.js';
-import { handleTicketModalSubmission, showPartnershipModal, showProviderRegistrationModal, showServiceRequestModal, createTicketEntryMenu } from '../services/ticketService.js';
+import {
+  createPartnershipTypeMenu,
+  createServiceTicketTypeMenu,
+  createTicketEntryMenu,
+  handleTicketModalSubmission,
+  showPartnershipModal,
+  showProviderRegistrationModal,
+  showServiceRequestModal,
+  showSupportModal
+} from '../services/ticketService.js';
 import { prisma } from '../services/prisma.js';
 import { createProviderAdEmbed, createTicketLogEmbed } from '../services/embedFactory.js';
 import { parseRateModalDealId } from '../utils/customIds.js';
@@ -8,7 +17,10 @@ import { parseRateModalDealId } from '../utils/customIds.js';
 export const registerInteractionCreateEvent = (client: Client) => {
   client.on(Events.InteractionCreate, async (interaction) => {
     try {
+      console.log(`[interaction] type=${interaction.type} user=${interaction.user?.tag ?? 'unknown'} id=${interaction.id}`);
+
       if (interaction.isChatInputCommand()) {
+        console.log(`[interaction] chat command: /${interaction.commandName}`);
         if (interaction.commandName === 'ticket-panel') {
           if (interaction.channel?.isTextBased() && 'send' in interaction.channel) {
             await interaction.channel.send({ content: 'Open a ticket using the dropdown below:', components: [createTicketEntryMenu()] });
@@ -16,27 +28,56 @@ export const registerInteractionCreateEvent = (client: Client) => {
           await interaction.reply({ content: 'Ticket panel posted.', ephemeral: true });
           return;
         }
+
         await handleCommand(interaction);
         return;
       }
 
-      if (interaction.isStringSelectMenu() && interaction.customId === 'ticket-entry-select') {
-        const selection = interaction.values[0];
-        if (selection === 'provider_registration') {
-          await showProviderRegistrationModal(interaction as StringSelectMenuInteraction);
-          return;
+      if (interaction.isStringSelectMenu()) {
+        console.log(`[interaction] select menu: ${interaction.customId} value=${interaction.values[0] ?? 'none'}`);
+
+        if (interaction.customId === 'ticket-entry-select') {
+          const selection = interaction.values[0];
+          if (selection === 'service_tickets') {
+            await interaction.reply({ content: 'Choose the service ticket type:', components: [createServiceTicketTypeMenu()], ephemeral: true });
+            return;
+          }
+
+          if (selection === 'partner_tickets') {
+            await interaction.reply({ content: 'Choose the partnership type:', components: [createPartnershipTypeMenu()], ephemeral: true });
+            return;
+          }
+
+          if (selection === 'support_ticket') {
+            await showSupportModal(interaction as StringSelectMenuInteraction);
+            return;
+          }
         }
-        if (selection === 'service_request') {
-          await showServiceRequestModal(interaction as StringSelectMenuInteraction);
-          return;
+
+        if (interaction.customId === 'service-ticket-type-select') {
+          const selection = interaction.values[0];
+          if (selection === 'provider_registration') {
+            await showProviderRegistrationModal(interaction as StringSelectMenuInteraction);
+            return;
+          }
+
+          if (selection === 'service_request') {
+            await showServiceRequestModal(interaction as StringSelectMenuInteraction);
+            return;
+          }
         }
-        if (selection === 'smp_partnership') {
-          await showPartnershipModal(interaction as StringSelectMenuInteraction);
-          return;
+
+        if (interaction.customId === 'partnership-ticket-type-select') {
+          const selection = interaction.values[0];
+          if (selection === 'basic' || selection === 'paid') {
+            await showPartnershipModal(interaction as StringSelectMenuInteraction, selection);
+            return;
+          }
         }
       }
 
       if (interaction.isModalSubmit()) {
+        console.log(`[interaction] modal submit: ${interaction.customId}`);
         const rateDealId = parseRateModalDealId(interaction.customId);
         if (rateDealId) {
           const stars = Number.parseInt(interaction.fields.getTextInputValue('stars'), 10);
@@ -114,6 +155,9 @@ export const registerInteractionCreateEvent = (client: Client) => {
           await interaction.reply({ content, ephemeral: true });
         }
       }
+
+      const errorMessage = error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}` : 'Unknown interaction error';
+      console.error(`[interaction] error for id=${interaction.id}: ${errorMessage}`);
       client.emit('warn', error instanceof Error ? error.message : 'Unknown interaction error');
     }
   });

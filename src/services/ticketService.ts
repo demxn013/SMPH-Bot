@@ -3,18 +3,16 @@ import {
   ChannelType,
   ModalBuilder,
   PermissionFlagsBits,
-  RoleSelectMenuBuilder,
   StringSelectMenuBuilder,
   TextInputBuilder,
   TextInputStyle,
-  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type GuildTextBasedChannel,
   type Interaction,
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction
 } from 'discord.js';
-import { env, transcriptConfig } from '../config/env.js';
+import { ticketChannelConfig, transcriptConfig, env } from '../config/env.js';
 import { SERVICE_TYPES, type ServiceType } from '../constants/serviceTypes.js';
 import { createTicketLogEmbed } from './embedFactory.js';
 import { prisma } from './prisma.js';
@@ -26,21 +24,47 @@ const fetchTranscriptChannel = async (interaction: Interaction, type: 'support' 
   if (!transcriptId) {
     return null;
   }
+
   const channel = await interaction.guild?.channels.fetch(transcriptId);
   if (!channel?.isTextBased()) {
     return null;
   }
+
   return channel;
 };
 
 export const createTicketEntryMenu = () => {
   const menu = new StringSelectMenuBuilder()
     .setCustomId('ticket-entry-select')
-    .setPlaceholder('Choose a ticket type')
+    .setPlaceholder('Choose a ticket category')
+    .addOptions(
+      { label: 'Service Tickets', value: 'service_tickets', description: 'Request a service or apply to provide one' },
+      { label: 'Partner Tickets', value: 'partner_tickets', description: 'Basic or paid partnership requests' },
+      { label: 'Support Ticket', value: 'support_ticket', description: 'Open a regular support ticket' }
+    );
+
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
+};
+
+export const createServiceTicketTypeMenu = () => {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId('service-ticket-type-select')
+    .setPlaceholder('Choose a service ticket type')
     .addOptions(
       { label: 'Request a Service', value: 'service_request' },
-      { label: 'Register as a Service Provider', value: 'provider_registration' },
-      { label: 'SMP Partnership', value: 'smp_partnership' }
+      { label: 'Apply as Service Provider', value: 'provider_registration' }
+    );
+
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
+};
+
+export const createPartnershipTypeMenu = () => {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId('partnership-ticket-type-select')
+    .setPlaceholder('Choose a partnership type')
+    .addOptions(
+      { label: 'Basic Partnership', value: 'basic' },
+      { label: 'Paid Partnership', value: 'paid' }
     );
 
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
@@ -82,8 +106,8 @@ export const showServiceRequestModal = async (interaction: StringSelectMenuInter
   await interaction.showModal(modal);
 };
 
-export const showPartnershipModal = async (interaction: StringSelectMenuInteraction) => {
-  const modal = new ModalBuilder().setTitle('SMP Partnership').setCustomId('partnership-modal');
+export const showPartnershipModal = async (interaction: StringSelectMenuInteraction, type: 'basic' | 'paid') => {
+  const modal = new ModalBuilder().setTitle(type === 'paid' ? 'Paid Partnership' : 'Basic Partnership').setCustomId(`partnership-modal:${type}`);
   modal.addComponents(
     new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('serverName').setLabel('Server Name').setStyle(TextInputStyle.Short).setRequired(true)),
     new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('description').setLabel('Description').setStyle(TextInputStyle.Paragraph).setRequired(true)),
@@ -95,10 +119,22 @@ export const showPartnershipModal = async (interaction: StringSelectMenuInteract
   await interaction.showModal(modal);
 };
 
+export const showSupportModal = async (interaction: StringSelectMenuInteraction) => {
+  const modal = new ModalBuilder().setTitle('Support Ticket').setCustomId('support-ticket-modal');
+  modal.addComponents(
+    new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('subject').setLabel('Subject').setStyle(TextInputStyle.Short).setRequired(true)),
+    new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('details').setLabel('What do you need help with?').setStyle(TextInputStyle.Paragraph).setRequired(true))
+  );
+
+  await interaction.showModal(modal);
+};
+
 export const handleTicketModalSubmission = async (interaction: ModalSubmitInteraction) => {
   if (!interaction.guild) {
     return;
   }
+
+  console.log(`[ticket] Modal submitted: ${interaction.customId} by ${interaction.user.tag} (${interaction.user.id})`);
 
   if (interaction.customId === 'provider-registration-modal') {
     const serviceType = interaction.fields.getTextInputValue('serviceType').toLowerCase() as ServiceType;
@@ -110,6 +146,7 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
     const channel = await interaction.guild.channels.create({
       name: `provider-register-${interaction.user.username.toLowerCase().replace(/[^a-z0-9-]/g, '')}`,
       type: ChannelType.GuildText,
+      parent: ticketChannelConfig.service,
       permissionOverwrites: [
         { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
@@ -143,6 +180,7 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
       }
     });
 
+    console.log(`[ticket] Created provider registration ticket ${ticket.id} in #${channel.id}`);
     await interaction.reply({ content: `Ticket created: <#${channel.id}>`, ephemeral: true });
     const transcript = await fetchTranscriptChannel(interaction, 'support');
     await transcript?.send({ embeds: [createTicketLogEmbed('Provider Registration Ticket Opened', `Ticket: ${ticket.id}\nUser: <@${interaction.user.id}>\nChannel: <#${channel.id}>`)] });
@@ -160,6 +198,7 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
     const channel = await interaction.guild.channels.create({
       name: `service-request-${interaction.user.username.toLowerCase().replace(/[^a-z0-9-]/g, '')}`,
       type: ChannelType.GuildText,
+      parent: ticketChannelConfig.service,
       permissionOverwrites: [
         { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
@@ -191,6 +230,7 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
       }
     });
 
+    console.log(`[ticket] Created service request ticket ${ticket.id} in #${channel.id}`);
     await channel.send(`Service request opened by <@${interaction.user.id}> with provider <@${providerDiscordId}>.`);
     await interaction.reply({ content: `Ticket created: <#${channel.id}>`, ephemeral: true });
     const transcript = await fetchTranscriptChannel(interaction, 'service');
@@ -198,11 +238,13 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
     return;
   }
 
-  if (interaction.customId === 'partnership-modal') {
+  if (interaction.customId.startsWith('partnership-modal:')) {
+    const partnershipType = interaction.customId.endsWith(':paid') ? 'paid' : 'basic';
     const serverName = interaction.fields.getTextInputValue('serverName');
     const channel = await interaction.guild.channels.create({
-      name: `partnership-${serverName.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 40)}`,
+      name: `partnership-${partnershipType}-${serverName.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 32)}`,
       type: ChannelType.GuildText,
+      parent: ticketChannelConfig.partnership,
       permissionOverwrites: [
         { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
@@ -213,7 +255,7 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
     const ticket = await prisma.ticket.create({
       data: {
         discordChannelId: channel.id,
-        ticketType: 'smp_partnership',
+        ticketType: `smp_partnership_${partnershipType}`,
         creatorId: interaction.user.id,
         status: 'Open'
       }
@@ -226,14 +268,47 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
         description: interaction.fields.getTextInputValue('description'),
         memberCount: Number.parseInt(interaction.fields.getTextInputValue('memberCount'), 10) || 0,
         inviteLink: interaction.fields.getTextInputValue('inviteLink'),
-        proposal: interaction.fields.getTextInputValue('proposal'),
+        proposal: `[${partnershipType.toUpperCase()}]\n${interaction.fields.getTextInputValue('proposal')}`,
         status: 'Pending'
       }
     });
 
+    console.log(`[ticket] Created ${partnershipType} partnership ticket ${ticket.id} in #${channel.id}`);
     await interaction.reply({ content: `Partnership ticket created: <#${channel.id}>`, ephemeral: true });
     const transcript = await fetchTranscriptChannel(interaction, 'partnership');
-    await transcript?.send({ embeds: [createTicketLogEmbed('SMP Partnership Ticket Opened', `Ticket: ${ticket.id}\nCreator: <@${interaction.user.id}>\nChannel: <#${channel.id}>`)] });
+    await transcript?.send({ embeds: [createTicketLogEmbed('SMP Partnership Ticket Opened', `Type: ${partnershipType}\nTicket: ${ticket.id}\nCreator: <@${interaction.user.id}>\nChannel: <#${channel.id}>`)] });
+    return;
+  }
+
+  if (interaction.customId === 'support-ticket-modal') {
+    const subject = interaction.fields.getTextInputValue('subject');
+    const details = interaction.fields.getTextInputValue('details');
+
+    const channel = await interaction.guild.channels.create({
+      name: `support-${interaction.user.username.toLowerCase().replace(/[^a-z0-9-]/g, '')}`,
+      type: ChannelType.GuildText,
+      parent: ticketChannelConfig.support,
+      permissionOverwrites: [
+        { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+        { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+        { id: env.SR_MOD_PLUS_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+      ]
+    });
+
+    const ticket = await prisma.ticket.create({
+      data: {
+        discordChannelId: channel.id,
+        ticketType: 'support',
+        creatorId: interaction.user.id,
+        status: 'Open'
+      }
+    });
+
+    await channel.send(`Support ticket opened by <@${interaction.user.id}>.\n**Subject:** ${subject}\n**Details:** ${details}`);
+    console.log(`[ticket] Created support ticket ${ticket.id} in #${channel.id}`);
+    await interaction.reply({ content: `Support ticket created: <#${channel.id}>`, ephemeral: true });
+    const transcript = await fetchTranscriptChannel(interaction, 'support');
+    await transcript?.send({ embeds: [createTicketLogEmbed('Support Ticket Opened', `Ticket: ${ticket.id}\nCreator: <@${interaction.user.id}>\nChannel: <#${channel.id}>`)] });
   }
 };
 
