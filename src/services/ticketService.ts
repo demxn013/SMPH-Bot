@@ -78,13 +78,13 @@ const createOpenTicketButton = (customId: string, label: string) =>
 const createServiceTicketPanelEmbed = () =>
   new EmbedBuilder()
     .setTitle('🛠️ Service Tickets')
-    .setDescription('Need to request a service or apply as a provider? Click the button below to start.')
+    .setDescription('Use the dropdown below to choose whether you want to request a service or apply as a provider.')
     .setColor(0x5865f2);
 
 const createPartnerTicketPanelEmbed = () =>
   new EmbedBuilder()
     .setTitle('🤝 Partner Tickets')
-    .setDescription('Open a partnership ticket (basic or paid) using the button below.')
+    .setDescription('Use the dropdown below to choose basic or paid partnership.')
     .setColor(0x57f287);
 
 const createSupportTicketPanelEmbed = () =>
@@ -104,19 +104,19 @@ export const postTicketPanels = async (interaction: ChatInputCommandInteraction)
       key: 'service',
       channelId: ticketChannelConfig.service,
       embed: createServiceTicketPanelEmbed(),
-      button: createOpenTicketButton('open-service-ticket', 'Open Service Ticket')
+      components: [createServiceTicketTypeMenu()]
     },
     {
       key: 'partnership',
       channelId: ticketChannelConfig.partnership,
       embed: createPartnerTicketPanelEmbed(),
-      button: createOpenTicketButton('open-partner-ticket', 'Open Partner Ticket')
+      components: [createPartnershipTypeMenu()]
     },
     {
       key: 'support',
       channelId: ticketChannelConfig.support,
       embed: createSupportTicketPanelEmbed(),
-      button: createOpenTicketButton('open-support-ticket', 'Open Support Ticket')
+      components: [createOpenTicketButton('open-support-ticket', 'Open Support Ticket')]
     }
   ] as const;
 
@@ -137,7 +137,7 @@ export const postTicketPanels = async (interaction: ChatInputCommandInteraction)
       continue;
     }
 
-    await channel.send({ embeds: [panel.embed], components: [panel.button] });
+    await channel.send({ embeds: [panel.embed], components: panel.components });
     results.push(`✅ ${panel.key}: posted in <#${panel.channelId}>`);
   }
 
@@ -208,8 +208,6 @@ export const showSupportModal = async (interaction: TicketPromptInteraction) => 
 
 export const handleTicketModalSubmission = async (interaction: ModalSubmitInteraction) => {
   if (!interaction.guild) return;
-
-  console.log(`[ticket] Modal submitted: ${interaction.customId} by ${interaction.user.tag} (${interaction.user.id})`);
 
   console.log(`[ticket] Modal submitted: ${interaction.customId} by ${interaction.user.tag} (${interaction.user.id})`);
 

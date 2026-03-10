@@ -32,20 +32,16 @@ export const registerInteractionCreateEvent = (client: Client) => {
 
       if (interaction.isButton()) {
         console.log(`[interaction] button: ${interaction.customId}`);
-        if (interaction.customId === 'open-service-ticket') {
-          await interaction.reply({ content: 'Choose the service ticket type:', components: [createServiceTicketTypeMenu()], flags: MessageFlags.Ephemeral });
-          return;
-        }
-
-        if (interaction.customId === 'open-partner-ticket') {
-          await interaction.reply({ content: 'Choose the partnership type:', components: [createPartnershipTypeMenu()], flags: MessageFlags.Ephemeral });
-          return;
-        }
-
         if (interaction.customId === 'open-support-ticket') {
           await showSupportModal(interaction);
           return;
         }
+
+        await interaction.reply({
+          content: 'Unknown button interaction. Please use the latest ticket panel message and try again.',
+          flags: MessageFlags.Ephemeral
+        });
+        return;
       }
 
       if (interaction.isStringSelectMenu()) {
