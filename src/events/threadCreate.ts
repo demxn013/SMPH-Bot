@@ -5,10 +5,14 @@ import { prisma } from '../services/prisma.js';
 import type { ServiceType } from '../constants/serviceTypes.js';
 
 const forumMap: Partial<Record<ServiceType, string>> = {
-  builders: env.BUILDERS_FORUM_ID,
-  developers: env.DEVELOPERS_FORUM_ID,
-  artists: env.ARTISTS_FORUM_ID,
-  editors: env.EDITORS_FORUM_ID
+  coding: env.CODING_FORUM_ID,
+  editing: env.EDITING_FORUM_ID,
+  bosses: env.BOSSES_FORUM_ID,
+  logos: env.LOGOS_FORUM_ID,
+  skins: env.SKINS_FORUM_ID,
+  building: env.BUILDING_FORUM_ID,
+  textures: env.TEXTURES_FORUM_ID,
+  thumbnails: env.THUMBNAILS_FORUM_ID
 };
 
 export const registerThreadCreateEvent = (client: Client) => {

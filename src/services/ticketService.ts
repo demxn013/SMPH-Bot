@@ -14,15 +14,19 @@ import {
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction
 } from 'discord.js';
-import { env } from '../config/env.js';
+import { env, transcriptConfig } from '../config/env.js';
 import { SERVICE_TYPES, type ServiceType } from '../constants/serviceTypes.js';
 import { createTicketLogEmbed } from './embedFactory.js';
 import { prisma } from './prisma.js';
 
 const safeNumber = (value: string) => Number.parseFloat(value.replace(/[^0-9.]/g, ''));
 
-const fetchTranscriptChannel = async (interaction: Interaction): Promise<GuildTextBasedChannel | null> => {
-  const channel = await interaction.guild?.channels.fetch(env.TRANSCRIPTS_CHANNEL_ID);
+const fetchTranscriptChannel = async (interaction: Interaction, type: 'support' | 'service' | 'partnership'): Promise<GuildTextBasedChannel | null> => {
+  const transcriptId = transcriptConfig[type];
+  if (!transcriptId) {
+    return null;
+  }
+  const channel = await interaction.guild?.channels.fetch(transcriptId);
   if (!channel?.isTextBased()) {
     return null;
   }
@@ -109,7 +113,7 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
       permissionOverwrites: [
         { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
-        { id: env.STAFF_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+        { id: env.SR_MOD_PLUS_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
       ]
     });
 
@@ -140,7 +144,7 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
     });
 
     await interaction.reply({ content: `Ticket created: <#${channel.id}>`, ephemeral: true });
-    const transcript = await fetchTranscriptChannel(interaction);
+    const transcript = await fetchTranscriptChannel(interaction, 'support');
     await transcript?.send({ embeds: [createTicketLogEmbed('Provider Registration Ticket Opened', `Ticket: ${ticket.id}\nUser: <@${interaction.user.id}>\nChannel: <#${channel.id}>`)] });
     return;
   }
@@ -160,7 +164,7 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
         { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
         { id: providerDiscordId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
-        { id: env.STAFF_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+        { id: env.SR_MOD_PLUS_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
       ]
     });
 
@@ -189,7 +193,7 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
 
     await channel.send(`Service request opened by <@${interaction.user.id}> with provider <@${providerDiscordId}>.`);
     await interaction.reply({ content: `Ticket created: <#${channel.id}>`, ephemeral: true });
-    const transcript = await fetchTranscriptChannel(interaction);
+    const transcript = await fetchTranscriptChannel(interaction, 'service');
     await transcript?.send({ embeds: [createTicketLogEmbed('Service Request Opened', `Ticket: ${ticket.id}\nCustomer: <@${interaction.user.id}>\nProvider: <@${providerDiscordId}>\nChannel: <#${channel.id}>`)] });
     return;
   }
@@ -202,7 +206,7 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
       permissionOverwrites: [
         { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
-        { id: env.STAFF_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+        { id: env.SR_MOD_PLUS_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
       ]
     });
 
@@ -228,7 +232,7 @@ export const handleTicketModalSubmission = async (interaction: ModalSubmitIntera
     });
 
     await interaction.reply({ content: `Partnership ticket created: <#${channel.id}>`, ephemeral: true });
-    const transcript = await fetchTranscriptChannel(interaction);
+    const transcript = await fetchTranscriptChannel(interaction, 'partnership');
     await transcript?.send({ embeds: [createTicketLogEmbed('SMP Partnership Ticket Opened', `Ticket: ${ticket.id}\nCreator: <@${interaction.user.id}>\nChannel: <#${channel.id}>`)] });
   }
 };

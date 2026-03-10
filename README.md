@@ -35,6 +35,44 @@ SMP Hub Discord marketplace bot implementation based on the docs in `docs/`.
    npm run dev
    ```
 
+
+## Environment variable guide
+
+`DISCORD_CLIENT_ID` = your Discord application ID (from the Discord Developer Portal -> your bot application -> **General Information** -> **Application ID**).
+
+### Transcript channels
+
+Set all three so logs are split by workflow:
+
+- `SUPPORT_TRANSCRIPTS_CHANNEL_ID` — general support/provider registration transcript logs
+- `PARTNERSHIP_TRANSCRIPTS_CHANNEL_ID` — SMP partnership transcript logs
+- `SERVICE_TRANSCRIPTS_CHANNEL_ID` — service request/deal transcript logs
+
+`TRANSCRIPTS_CHANNEL_ID` is kept only as a fallback for older setups.
+
+### Staff role for service moderation
+
+- `SR_MOD_PLUS_ROLE_ID` — only this role (and higher roles with equivalent perms) is added to service/provider/partnership ticket channels by the bot.
+
+### Provider roles
+
+- `VERIFIED_PROVIDER_ROLE_ID` — unified verified provider role
+- `PROVIDER_DEVELOPER_ROLE_ID` — developers (coding + bosses)
+- `PROVIDER_ARTIST_ROLE_ID` — artists (textures + thumbnails + skins + logos)
+- `PROVIDER_EDITOR_ROLE_ID` — editors (video editing)
+- `PROVIDER_BUILDER_ROLE_ID` — builders (building services)
+
+### Forum channel IDs
+
+- `CODING_FORUM_ID`
+- `EDITING_FORUM_ID`
+- `BOSSES_FORUM_ID`
+- `LOGOS_FORUM_ID`
+- `SKINS_FORUM_ID`
+- `BUILDING_FORUM_ID`
+- `TEXTURES_FORUM_ID`
+- `THUMBNAILS_FORUM_ID`
+
 ## Command reference
 
 ### Project / terminal commands
